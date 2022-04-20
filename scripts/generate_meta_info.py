@@ -8,6 +8,7 @@ def main(args):
     txt_file = open(args.meta_info, 'w')
     for folder, root in zip(args.input, args.root):
         img_paths = sorted(glob.glob(os.path.join(folder, '*')))
+        print(folder, root)
         for img_path in img_paths:
             status = True
             if args.check:
@@ -50,7 +51,7 @@ if __name__ == '__main__':
         help='txt path for meta info')
     parser.add_argument('--check', action='store_true', help='Read image to check whether it is ok')
     args = parser.parse_args()
-
+    print(args.input)
     assert len(args.input) == len(args.root), ('Input folder and folder root should have the same length, but got '
                                                f'{len(args.input)} and {len(args.root)}.')
     os.makedirs(os.path.dirname(args.meta_info), exist_ok=True)

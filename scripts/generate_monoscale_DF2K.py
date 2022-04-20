@@ -7,8 +7,7 @@ from PIL import Image
 def main(args):
     # For DF2K, we consider the following three scales,
     # and the smallest image whose shortest edge is 400
-    # scale_list = [0.75, 0.5, 1 / 3] # original scale list
-    scale_list = [0.9, 1.2]
+    scale_list = [0.75, 0.5, 1 / 3]
     shortest_edge = 400
 
     path_list = sorted(glob.glob(os.path.join(args.input, '*')))
@@ -18,6 +17,8 @@ def main(args):
 
         img = Image.open(path)
         width, height = img.size
+        w_sf = 1024.0 / width
+        h_sf = 1024.0 / height
         for idx, scale in enumerate(scale_list):
             print(f'\t{scale:.2f}')
             rlt = img.resize((int(width * scale), int(height * scale)), resample=Image.LANCZOS)
@@ -43,6 +44,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--input', type=str, default='datasets/DF2K/DF2K_HR', help='Input folder')
     parser.add_argument('--output', type=str, default='datasets/DF2K/DF2K_multiscale', help='Output folder')
+    parser.add_argument('--model_scale', type=int, default=2, help="Scale of ")
     args = parser.parse_args()
 
     os.makedirs(args.output, exist_ok=True)

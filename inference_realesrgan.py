@@ -39,6 +39,7 @@ def main():
         type=str,
         default='auto',
         help='Image extension. Options: auto | jpg | png, auto means using the same extension as inputs')
+    parser.add_argument('--custom', type=str, default=None, help='Path to custom weights')
     args = parser.parse_args()
 
     # determine models according to model names
@@ -67,7 +68,10 @@ def main():
     model_path = os.path.join('experiments/pretrained_models', args.model_name + '.pth')
     if not os.path.isfile(model_path):
         model_path = os.path.join('realesrgan/weights', args.model_name + '.pth')
+    if args.custom:
+        model_path = f"experiments/{args.custom}"
     if not os.path.isfile(model_path):
+        print(model_path)
         raise ValueError(f'Model {args.model_name} does not exist.')
 
     # restorer

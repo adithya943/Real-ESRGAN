@@ -3,9 +3,25 @@ import cv2
 import glob
 import os
 from basicsr.archs.rrdbnet_arch import RRDBNet
+import numpy as np
+import time
+from statistics import mean
 
 from realesrgan import RealESRGANer
 from realesrgan.archs.srvgg_arch import SRVGGNetCompact
+
+
+def unsharp_mask(image, kernel_size=(5, 5), sigma=1.0, amount=1.0, threshold=0):
+    """Return a sharpened version of the image, using an unsharp mask."""
+    blurred = cv2.GaussianBlur(image, kernel_size, sigma)
+    sharpened = float(amount + 1) * image - float(amount) * blurred
+    sharpened = np.maximum(sharpened, np.zeros(sharpened.shape))
+    sharpened = np.minimum(sharpened, 255 * np.ones(sharpened.shape))
+    sharpened = sharpened.round().astype(np.uint8)
+    if threshold > 0:
+        low_contrast_mask = np.absolute(image - blurred) < threshold
+        np.copyto(sharpened, image, where=low_contrast_mask)
+    return sharpened
 
 
 def main():
@@ -40,6 +56,11 @@ def main():
         default='auto',
         help='Image extension. Options: auto | jpg | png, auto means using the same extension as inputs')
     parser.add_argument('--custom', type=str, default=None, help='Path to custom weights')
+    parser.add_argument('--sharpen', action='store_true', help='To sharpen the image prior to SR.')
+    parser.add_argument('--prescale', action='store_true', help="Prescale the image before upresing.")
+    parser.add_argument('--prescale_val', type=float, default=2.0, help="How much to prescale by.")
+    parser.add_argument('--benchmark', action='store_true',
+                        help='Benchmark amount of time the model takes per inference.')
     args = parser.parse_args()
 
     # determine models according to model names
@@ -73,7 +94,11 @@ def main():
     if not os.path.isfile(model_path):
         print(model_path)
         raise ValueError(f'Model {args.model_name} does not exist.')
-
+    time_dict = {
+        'setup_time': 0,
+        'inference_times': []
+    }
+    setup_time_start = time.time()
     # restorer
     upsampler = RealESRGANer(
         scale=netscale,
@@ -92,6 +117,11 @@ def main():
             arch='clean',
             channel_multiplier=2,
             bg_upsampler=upsampler)
+
+    # check how long setup takes
+    setup_time_end = time.time()
+    time_dict['setup_time'] = setup_time_end - setup_time_start
+
     os.makedirs(args.output, exist_ok=True)
 
     if os.path.isfile(args.input):
@@ -104,16 +134,24 @@ def main():
         print('Testing', idx, imgname)
 
         img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+        if args.sharpen:
+            img = unsharp_mask(img, amount=2.0)
+        if args.prescale:
+            img = cv2.resize(img, (0, 0), fx=args.prescale_val, fy=args.prescale_val, interpolation=cv2.INTER_CUBIC)
+
         if len(img.shape) == 3 and img.shape[2] == 4:
             img_mode = 'RGBA'
         else:
             img_mode = None
 
         try:
+            inf_time_start = time.time()
             if args.face_enhance:
                 _, _, output = face_enhancer.enhance(img, has_aligned=False, only_center_face=False, paste_back=True)
             else:
                 output, _ = upsampler.enhance(img, outscale=args.outscale)
+            inf_time_end = time.time()
+            time_dict['inference_times'].append(inf_time_end - inf_time_start)
         except RuntimeError as error:
             print('Error', error)
             print('If you encounter CUDA out of memory, try to set --tile with a smaller number.')
@@ -126,6 +164,10 @@ def main():
                 extension = 'png'
             save_path = os.path.join(args.output, f'{imgname}_{args.suffix}.{extension}')
             cv2.imwrite(save_path, output)
+
+    if args.benchmark:
+        print(f"Setup time: {time_dict['setup_time']}")
+        print(f"Average inference time: {mean(time_dict['inference_times'])}")
 
 
 if __name__ == '__main__':
